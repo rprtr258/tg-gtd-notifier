@@ -3,7 +3,8 @@
   [datetime [datetime date]]
   [json [dumps loads]]
   [configparser [ConfigParser]]
-  [random [sample]])
+  [random [sample]]
+  [time [sleep]])
 (import
   [notion.client [NotionClient]]
   requests)
@@ -100,5 +101,9 @@
 
 (while
   True
-  (if (= (. (datetime.now) minute) 7) send-notification))
+    (if
+      (= (. (datetime.now) hour) 9) (do
+        (send-notification)
+	(sleep (* 60 60)))
+      (sleep (* 60 60))))
 
