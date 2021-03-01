@@ -66,7 +66,7 @@
 
 (setv message ((. "\n" join)
   (+
-   [(tag "b" f"📆 Сегодня {today-date}")]
+    [(tag "b" f"📆 Сегодня {today-date}")]
     [""]
     [(tag "i" "✨ Что еще можно сделать:")]
     todo-plans
@@ -79,10 +79,10 @@
   (requests.get
     f"https://api.telegram.org/bot{TELEGRAM-TOKEN}/sendMessage"
     :data {
-    "chat_id" TELEGRAM-CHAT-ID
-    "parse_mode" "HTML"
-    "text" message
-  })
+      "chat_id" TELEGRAM-CHAT-ID
+      "parse_mode" "HTML"
+      "text" message
+    })
   (. content)
   ((fn [x] (x.decode "utf-8")))
   loads))
