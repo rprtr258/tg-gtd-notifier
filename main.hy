@@ -23,7 +23,7 @@
 (defn get-block-by-title [page title]
   (next
     (filter
-      (fn [x] (= x.title title))
+      (fn [x] (and (hasattr x "title") (= x.title title)))
       page.children)))
 
 (defn tag [tag-name text] f"<{tag-name}>{text}</{tag-name}>")
@@ -99,11 +99,13 @@
         print))
     (print "Sent succesfuly"))))
 
+(defn sleep-hour [] (sleep (* 60 60)))
+
 (while
   True
     (if
       (= (. (datetime.now) hour) 9) (do
         (send-notification)
-	(sleep (* 60 60)))
-      (sleep (* 60 60))))
+        (sleep-hour))
+      (sleep-hour)))
 
