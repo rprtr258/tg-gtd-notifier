@@ -104,6 +104,5 @@
 (while
   True
     (do
-      (if
-        (= (. (datetime.now) hour) 9) (send-notification))
+      (if (= (. (datetime.now) hour) 9) (send-notification))
       (sleep-hour)))
