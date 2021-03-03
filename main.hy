@@ -101,6 +101,8 @@
 
 (defn sleep-hour [] (sleep (* 60 60)))
 
+
+(send-notification)
 (while
   True
     (do
