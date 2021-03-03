@@ -78,13 +78,13 @@
     [(tag "b" f"📆 Сегодня {today-date}")]
     [""]
     [(tag "i" "🌟 Планы на сегодня:")]
-    todo-plans
+    today-plans
     [""]
     [(tag "i" "⌛ Дедлайны:")]
     due-plans
     [""]
     [(tag "i" "✨ Что еще можно сделать:")]
-    today-plans)))
+    todo-plans)))
 
 (defn send-notification [] (do
   (setv client (NotionClient :token-v2 NOTION-TOKEN-V2))
