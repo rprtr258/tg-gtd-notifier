@@ -43,24 +43,22 @@
       (if icon icon ""))
     "")))
 
-(defn compose-message [today-date todo-plans today-plans] ((. "\n" join)
-    (+
-      [(tag "b" f"📆 Сегодня {today-date}")]
-      [""]
-      [(tag "i" "✨ Что еще можно сделать:")]
-      todo-plans
-      [""]
-      [(tag "i" "🌟 Планы на сегодня:")]
-      today-plans)))
-
 (defn get-todo-plans [page] (do
   (setv todos-list (get-block-by-title page "Следующие конкретные действия"))
   (->>
     (todos-list.collection.get-rows)
-    list
-    (sample :k 3)
-    (map (fn [x] f"{(get-todo-icon x)}{x.title}"))
-    format-list)))
+    list)))
+
+(defn sample-todos [items] (->>
+  items
+  (sample :k 3)
+  (map (fn [x] f"{(get-todo-icon x)}{x.title}"))
+  format-list))
+
+(defn format-dues [items] (->>
+  items
+  (map (fn [x] f"{x.due.start} - {(get-todo-icon x)}{x.title}"))
+  format-list))
 
 (defn get-today-plans [page today-date] (do
   (setv calendar (get-block-by-title page "Ежедневник"))
@@ -71,13 +69,31 @@
       x.title)
     format-list)))
 
+(defn split [pred lst] [
+  (list (filter pred lst))
+  (list (remove pred lst))])
+
+(defn compose-message [today-date due-plans todo-plans today-plans] ((. "\n" join)
+  (+
+    [(tag "b" f"📆 Сегодня {today-date}")]
+    [""]
+    [(tag "i" "🌟 Планы на сегодня:")]
+    todo-plans
+    [""]
+    [(tag "i" "⌛ Дедлайны:")]
+    due-plans
+    [""]
+    [(tag "i" "✨ Что еще можно сделать:")]
+    today-plans)))
+
 (defn send-notification [] (do
   (setv client (NotionClient :token-v2 NOTION-TOKEN-V2))
   (setv page (client.get-block GTD-URL))
   (setv today-date (.date (datetime.today)))
   (setv today-plans (get-today-plans page today-date))
   (setv todo-plans (get-todo-plans page))
-  (setv message (compose-message today-date todo-plans today-plans))
+  (setv [due-todos not-due-todos] (split (fn [x] x.due) todo-plans))
+  (setv message (compose-message today-date (format-dues due-todos) (sample-todos not-due-todos) today-plans))
   (setv tg-response (->
     (requests.get
       f"https://api.telegram.org/bot{TELEGRAM-TOKEN}/sendMessage"
