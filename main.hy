@@ -9,7 +9,7 @@
   [notion.client [NotionClient]]
   requests)
 
-(sys.stdout.reconfigure :encoding "utf-8")
+; (sys.stdout.reconfigure :encoding "utf-8")
 
 
 (setv config (ConfigParser))
