@@ -8,6 +8,7 @@
 (import
   [notion.client [NotionClient]]
   requests)
+(import hotfix)
 
 ; (sys.stdout.reconfigure :encoding "utf-8")
 
@@ -19,6 +20,7 @@
 (setv TELEGRAM-TOKEN (get config "tg" "TOKEN"))
 (setv TELEGRAM-CHAT-ID (get config "tg" "CHAT-ID"))
 
+(defn format-date [date] (date.strftime "%d %B %Y"))
 
 (defn get-block-by-title [page title]
   (next
@@ -57,7 +59,7 @@
 
 (defn format-dues [items] (->>
   items
-  (map (fn [x] f"{x.due.start} - {(get-todo-icon x)}{x.title}"))
+  (map (fn [x] f"{(format-date x.due.start)} - {(get-todo-icon x)}{x.title}"))
   format-list))
 
 (defn get-today-plans [page today-date] (do
@@ -65,10 +67,13 @@
   (->
     (lfor
       x (calendar.collection.get-rows)
-      :if (= x.date.start today-date)
+      :if (or
+        (= x.date.start today-date)
+        (and
+          (isinstance x.date.start datetime)
+          (= (x.date.start.date) today-date)))
       x.title)
     format-list)))
-
 (defn split [pred lst] [
   (list (filter pred lst))
   (list (remove pred lst))])
@@ -89,7 +94,11 @@
 (defn send-notification [] (do
   (setv client (NotionClient :token-v2 NOTION-TOKEN-V2))
   (setv page (client.get-block GTD-URL))
-  (setv today-date (.date (datetime.today)))
+  (setv today-date (->
+    datetime
+    (.today)
+    (.date)
+    (format-date)))
   (setv today-plans (get-today-plans page today-date))
   (setv todo-plans (get-todo-plans page))
   (setv [due-todos not-due-todos] (split (fn [x] x.due) todo-plans))
