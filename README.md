@@ -1,1 +1,0 @@
-# notion-tg-gtd-notifier
