@@ -5,7 +5,8 @@
   [configparser [ConfigParser]]
   [random [sample]]
   [time [sleep]]
-  [os [environ]])
+  [os [environ]]
+  [zoneinfo [ZoneInfo]])
 (import
   [notion.client [NotionClient]]
   requests)
@@ -97,10 +98,7 @@
   (setv client (NotionClient :token-v2 NOTION-TOKEN-V2))
   (setv page (client.get-block GTD-URL))
   (setv calendar (client.get-block CALENDAR-URL))
-  (setv today-date (->
-    datetime
-    (.today)
-    (.date)))
+  (setv today-date (.date (datetime.now :tz (ZoneInfo "Europe/Moscow"))))
   (setv today-plans (get-today-plans calendar today-date))
   (setv todo-plans (get-todo-plans page))
   (setv [due-todos not-due-todos] (split (fn [x] x.due) todo-plans))
