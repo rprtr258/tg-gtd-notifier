@@ -17,6 +17,7 @@
 ((. config read) "config.ini")
 (setv NOTION-TOKEN-V2 (get config "notion" "TOKEN-V2"))
 (setv GTD-URL (get config "notion" "GTD-URL"))
+(setv CALENDAR-URL (get config "notion" "CALENDAR-URL"))
 (setv TELEGRAM-TOKEN (get config "tg" "TOKEN"))
 (setv TELEGRAM-CHAT-ID (get config "tg" "CHAT-ID"))
 
@@ -62,8 +63,7 @@
   (map (fn [x] f"{(format-date x.due.start)} - {(get-todo-icon x)}{x.title}"))
   format-list))
 
-(defn get-today-plans [page today-date] (do
-  (setv calendar (get-block-by-title page "Ежедневник"))
+(defn get-today-plans [calendar today-date] (do
   (->
     (lfor
       x (calendar.collection.get-rows)
@@ -74,13 +74,14 @@
           (= (x.date.start.date) today-date)))
       x.title)
     format-list)))
+
 (defn split [pred lst] [
   (list (filter pred lst))
   (list (remove pred lst))])
 
 (defn compose-message [today-date due-plans todo-plans today-plans] ((. "\n" join)
   (+
-    [(tag "b" f"📆 Сегодня {today-date}")]
+    [(tag "b" f"📆 Сегодня {(format-date today-date)}")]
     [""]
     [(tag "i" "🌟 Планы на сегодня:")]
     today-plans
@@ -94,12 +95,12 @@
 (defn send-notification [] (do
   (setv client (NotionClient :token-v2 NOTION-TOKEN-V2))
   (setv page (client.get-block GTD-URL))
+  (setv calendar (client.get-block CALENDAR-URL))
   (setv today-date (->
     datetime
     (.today)
-    (.date)
-    (format-date)))
-  (setv today-plans (get-today-plans page today-date))
+    (.date)))
+  (setv today-plans (get-today-plans calendar today-date))
   (setv todo-plans (get-todo-plans page))
   (setv [due-todos not-due-todos] (split (fn [x] x.due) todo-plans))
   (setv message (compose-message today-date (format-dues due-todos) (sample-todos not-due-todos) today-plans))
