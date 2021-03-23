@@ -94,11 +94,13 @@
     [(tag "i" "✨ Что еще можно сделать:")]
     todo-plans)))
 
+(defn get-now [] (datetime.now :tz (timezone "Europe/Moscow")))
+
 (defn send-notification [] (do
   (setv client (NotionClient :token-v2 NOTION-TOKEN-V2))
   (setv page (client.get-block GTD-URL))
   (setv calendar (client.get-block CALENDAR-URL))
-  (setv today-date (.date (datetime.now :tz (timezone "Europe/Moscow"))))
+  (setv today-date (.date (get-now)))
   (setv today-plans (get-today-plans calendar today-date))
   (setv todo-plans (get-todo-plans page))
   (setv [due-todos not-due-todos] (split (fn [x] x.due) todo-plans))
@@ -131,5 +133,5 @@
 (while
   True
     (do
-      (if (= (. (datetime.now) hour) 9) (send-notification))
+      (if (= (. (get-now) hour) 9) (send-notification))
       (sleep-hour)))
