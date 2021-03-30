@@ -129,7 +129,7 @@
 (defn sleep-hour [] (sleep (* 60 60)))
 
 
-(send-notification)
+(if (= (get sys.argv 1) "--debug") (send-notification))
 (while
   True
     (do
