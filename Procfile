@@ -1,1 +1,1 @@
-worker: hy main.hy
+worker: hy main.hy --debug
