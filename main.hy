@@ -14,14 +14,15 @@
 
 ; (sys.stdout.reconfigure :encoding "utf-8")
 
+(defn safe-get [from key] (try (get from key) (except [KeyError] None)))
 
 (setv config (ConfigParser))
 ((. config read) "config.ini")
-(setv NOTION-TOKEN-V2 (or (get environ "NOTION-TOKEN-V2") (get config "notion" "TOKEN-V2")))
-(setv GTD-URL (or (get environ "GTD-URL") (get config "notion" "GTD-URL")))
-(setv CALENDAR-URL (or (get environ "CALENDAR-URL") (get config "notion" "CALENDAR-URL")))
-(setv TELEGRAM-TOKEN (or (get environ "TELEGRAM-TOKEN") (get config "tg" "TOKEN")))
-(setv TELEGRAM-CHAT-ID (or (get environ "TELEGRAM-CHAT-ID") (get config "tg" "CHAT-ID")))
+(setv NOTION-TOKEN-V2 (or (safe-get environ "NOTION-TOKEN-V2") (get config "notion" "TOKEN-V2")))
+(setv GTD-URL (or (safe-get environ "GTD-URL") (get config "notion" "GTD-URL")))
+(setv CALENDAR-URL (or (safe-get environ "CALENDAR-URL") (get config "notion" "CALENDAR-URL")))
+(setv TELEGRAM-TOKEN (or (safe-get environ "TELEGRAM-TOKEN") (get config "tg" "TOKEN")))
+(setv TELEGRAM-CHAT-ID (or (safe-get environ "TELEGRAM-CHAT-ID") (get config "tg" "CHAT-ID")))
 
 (defn format-date [date] (date.strftime "%d %B %Y"))
 
@@ -129,7 +130,7 @@
 (defn sleep-hour [] (sleep (* 60 60)))
 
 
-(if (= (get sys.argv 1) "--debug") (send-notification))
+(if (and (> (len sys.argv) 1) (= (get sys.argv 1) "--debug")) (send-notification))
 (while
   True
     (do
