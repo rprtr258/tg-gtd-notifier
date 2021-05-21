@@ -86,6 +86,7 @@
   (+
     [(tag "b" f"📆 Сегодня {(format-date today-date)}")]
     [""]
+    [(str (get-now))]
     [(tag "i" "🌟 Планы на сегодня:")]
     today-plans
     [""]
