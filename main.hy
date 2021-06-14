@@ -131,9 +131,9 @@
 (defn sleep-hour [] (sleep (* 60 60)))
 
 (send-notification)
-#(if (and (> (len sys.argv) 1) (= (get sys.argv 1) "--debug")) (send-notification))
-#(while
-#  True
-#  (do
-#    (if (= (. (get-now) hour) 9) (send-notification))
-#      (sleep-hour)))
+;(if (and (> (len sys.argv) 1) (= (get sys.argv 1) "--debug")) (send-notification))
+;(while
+;  True
+;  (do
+;    (if (= (. (get-now) hour) 9) (send-notification))
+;      (sleep-hour)))
