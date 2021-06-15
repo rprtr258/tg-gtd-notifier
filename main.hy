@@ -9,7 +9,7 @@
   [pytz [timezone]])
 (import requests)
 
-(sys.stdout.reconfigure :encoding "utf-8")
+; (sys.stdout.reconfigure :encoding "utf-8")
 
 (defn safe-get [from key] (try (get from key) (except [KeyError] None)))
 
