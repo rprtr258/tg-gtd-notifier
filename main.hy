@@ -30,9 +30,12 @@
   (map (fn [x] f"- {x}"))
   list))
 
+(defn my-sample-3 [items]
+  (if (< (len items) 3) items (sample items :k 3)))
+
 (defn sample-todos [items] (->>
   items
-  (sample :k 3)
+  (my-sample-3)
   (map (fn [x] f"{x}"))
   format-list))
 
