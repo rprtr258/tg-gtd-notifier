@@ -48,8 +48,18 @@
   (->
     (lfor
       x calendar-items
-      :if (= (.date (datetime.strptime (get x "properties" "Date" "date" "start") "%Y-%m-%d")) today-date)
-      (get x "properties" "Name" "title" 0 "plain_text"))
+      :if (=
+        (.date (datetime.strptime (.join "" (take 10 (get x "properties" "Date" "date" "start"))) "%Y-%m-%d"))
+        today-date)
+      (do
+        (setv title (get x "properties" "Name" "title" 0 "plain_text"))
+        (setv date (get x "properties" "Date" "date" "start"))
+        (+ (if (> (len date) 10) (+ (get (->
+          (datetime.strptime
+            (.join "" (get (get x "properties" "Date" "date" "start") (slice 11 16)))
+            "%H:%M")
+          .time
+          str) (slice None 5)) " ") "") title)))
     format-list)))
 
 (defn split [pred lst] [
