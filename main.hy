@@ -5,11 +5,11 @@
   [configparser [ConfigParser]]
   [random [sample]]
   [time [sleep]]
-  [os [environ]]
+  [os [environ name]]
   [pytz [timezone]])
 (import requests)
 
-; (sys.stdout.reconfigure :encoding "utf-8")
+(if (= name "nt") (sys.stdout.reconfigure :encoding "utf-8"))
 
 (defn safe-get [from key] (try (get from key) (except [KeyError] None)))
 
@@ -90,14 +90,8 @@
     loads
     (get "results")))
 
-(defn send-notification [] (do
-  (setv todo-items (lfor x (notion/list TODOS-ID) (get x "properties" "Name" "title" 0 "plain_text")))
-  (setv calendar-items (notion/list CALENDAR-ID))
-  (setv today-date (.date (get-now)))
-  (setv today-plans (get-today-plans calendar-items today-date))
-  (setv [due-todos not-due-todos] (split (fn [x] False) todo-items)) ;x.due) todo-plans)) ; TODO: fix
-  (setv message (compose-message today-date (format-dues due-todos) (sample-todos not-due-todos) today-plans))
-  (setv tg-response (->
+(defn send-tg-message [message]
+  (->
     (requests.get
       f"https://api.telegram.org/bot{TELEGRAM-TOKEN}/sendMessage"
       :data {
@@ -108,6 +102,15 @@
     (. content)
     ((fn [x] (x.decode "utf-8")))
     loads))
+
+(defn send-notification [] (do
+  (setv todo-items (lfor x (notion/list TODOS-ID) (get x "properties" "Name" "title" 0 "plain_text")))
+  (setv calendar-items (notion/list CALENDAR-ID))
+  (setv today-date (.date (get-now)))
+  (setv today-plans (get-today-plans calendar-items today-date))
+  (setv [due-todos not-due-todos] (split (fn [x] False) todo-items)) ;x.due) todo-plans)) ; TODO: fix
+  (setv message (compose-message today-date (format-dues due-todos) (sample-todos not-due-todos) today-plans))
+  (setv tg-response (send-tg-message message))
   (if-not
     (get tg-response "ok")
     (do
@@ -120,9 +123,25 @@
 
 (defn sleep-hour [] (sleep (* 60 60)))
 
-(if (and (> (len sys.argv) 1) (= (get sys.argv 1) "--debug")) (send-notification))
-(while
-  True
-  (do
+(defn main []
+  (if (and (> (len sys.argv) 1) (= (get sys.argv 1) "--debug")) (send-notification))
+  (while
+    True
     (if (= (. (get-now) hour) 9) (send-notification))
       (sleep-hour)))
+
+(try
+  (main)
+  (except [x [Exception]]
+    (import traceback [html [escape]])
+    (setv traceback (traceback.format_exc))
+    (setv message (.join "\n"
+      [(* "=" 30)
+      f"Exception occured. Traceback:"
+      (* "=" 30)
+      traceback]))
+    (print message)
+    (->
+      message
+      escape
+      send-tg-message)))
