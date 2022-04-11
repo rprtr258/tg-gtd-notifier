@@ -1,12 +1,13 @@
 (import
   sys
+  base64
   [glob [glob]]
   [datetime [datetime date]]
   [json [dumps loads]]
   [configparser [ConfigParser]]
   [random [sample]]
   [time [sleep]]
-  [os [environ name path]]
+  [os [environ name]]
   [pytz [timezone]])
 (import requests)
 
@@ -18,6 +19,7 @@
 ((. config read) "config.ini")
 (setv TELEGRAM-TOKEN (or (safe-get environ "TELEGRAM-TOKEN") (get config "tg" "TOKEN")))
 (setv TELEGRAM-CHAT-ID (or (safe-get environ "TELEGRAM-CHAT-ID") (get config "tg" "CHAT-ID")))
+(setv GITHUB-OAUTH (or (safe-get environ "GITHUB-OAUTH") (get config "github" "OAUTH")))
 
 (defn format-date [date] (date.strftime "%d %B %Y"))
 
@@ -92,20 +94,36 @@
     ((fn [x] (x.decode "utf-8")))
     loads))
 
+(defn github/api [url]
+  (->> url
+    (+ "https://api.github.com")
+    (requests.get :auth (, "rprtr258" GITHUB_OAUTH))
+    .json))
+
 (defn gtd/get-items [dir]
-  (lfor filename (glob (path.join "/home/rprtr258/GTD/" dir "*.md"))
-    (.readline (open filename))))
+  (lfor file (github/api f"/repos/rprtr258/gtd-backup/contents/{dir}")
+    :if (.endswith (get file "name") ".md")
+    (do
+      (setv filename (get file "name"))
+      (setv v (github/api f"/repos/rprtr258/gtd-backup/contents/{dir}/{filename}"))
+      (-> v
+        (get "content")
+        base64.b64decode
+        (.decode "utf-8")
+        (.split "\n")
+        (get 0)))))
 
 (defn gtd/get-todos [] (gtd/get-items "next_actions"))
 
 (defn gtd/get-calendar-items [] (gtd/get-items "calendar"))
 
-(defn send-notification [] (do
+(defn send-notification []
+  ; TODO: union setv-s
   (setv todo-items (gtd/get-todos))
   (setv calendar-items (gtd/get-calendar-items))
   (setv today-date (.date (get-now)))
   ;(setv today-plans (get-today-plans calendar-items today-date))
-  (setv today-plans ["aboba"])
+  (setv today-plans calendar-items) ; TODO: filter
   (setv [due-todos not-due-todos] (split (fn [x] False) todo-items)) ;x.due) todo-items)) ; TODO: fix
   (setv message (compose-message today-date (format-dues due-todos) (sample-todos not-due-todos) today-plans))
   (setv tg-response (send-tg-message message))
@@ -117,7 +135,7 @@
         tg-response
         (dumps :indent 2)
         print))
-    (print "Sent succesfuly"))))
+    (print "Sent succesfuly")))
 
 (defn sleep-hour [] (sleep (* 60 60)))
 
