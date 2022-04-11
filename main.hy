@@ -1,6 +1,7 @@
 (import
   sys
   base64
+  re
   [glob [glob]]
   [datetime [datetime date]]
   [json [dumps loads]]
@@ -44,23 +45,12 @@
   (map (fn [x] f"{(format-date x.due.start)} - {x}"))
   format-list))
 
-(defn get-today-plans [calendar-items today-date] (do
-  (->
+(defn get-today-plans [calendar-items today-date]
+  (format-list
     (lfor
-      x calendar-items
-      :if (=
-        (.date (datetime.strptime (.join "" (take 10 (get x "properties" "Date" "date" "start"))) "%Y-%m-%d"))
-        today-date)
-      (do
-        (setv title (get x "properties" "Name" "title" 0 "plain_text"))
-        (setv date (get x "properties" "Date" "date" "start"))
-        (+ (if (> (len date) 10) (+ (get (->
-          (datetime.strptime
-            (.join "" (get (get x "properties" "Date" "date" "start") (slice 11 16)))
-            "%H:%M")
-          .time
-          str) (slice None 5)) " ") "") title)))
-    format-list)))
+      [title the_date] calendar-items
+      :if (= the_date today-date)
+      title)))
 
 (defn split [pred lst] [
   (list (filter pred lst))
@@ -68,15 +58,11 @@
 
 (defn compose-message [today-date due-plans todo-plans today-plans] ((. "\n" join)
   (+
-    [(tag "b" f"📆 Сегодня {(format-date today-date)}")]
-    [""]
-    [(tag "i" "🌟 Планы на сегодня:")]
+    [(tag "b" f"📆 Сегодня {(format-date today-date)}") "" (tag "i" "🌟 Планы на сегодня:")]
     today-plans
-    [""]
-    [(tag "i" "⌛ Дедлайны:")]
+    ["" (tag "i" "⌛ Дедлайны:")]
     due-plans
-    [""]
-    [(tag "i" "✨ Что еще можно сделать:")]
+    ["" (tag "i" "✨ Что еще можно сделать:")]
     todo-plans)))
 
 (defn get-now [] (datetime.now :tz (timezone "Europe/Moscow")))
@@ -110,20 +96,29 @@
         (get "content")
         base64.b64decode
         (.decode "utf-8")
-        (.split "\n")
-        (get 0)))))
+        (.split "\n")))))
 
-(defn gtd/get-todos [] (gtd/get-items "next_actions"))
+(defn gtd/get-todos [] (lfor x (gtd/get-items "next_actions")
+  (-> x (get 0))))
 
-(defn gtd/get-calendar-items [] (gtd/get-items "calendar"))
+(defn gtd/get-calendar-items [] (lfor x (gtd/get-items "calendar")
+  (,
+    (get x 0)
+    (->
+      (->> x
+        (.join "\n")
+        (re.search r"Date: (\d{2}\.\d{2}\.\d{4})"))
+      (.groups)
+      (get 0)
+      (datetime.strptime "%d.%m.%Y")
+      .date))))
 
 (defn send-notification []
   ; TODO: union setv-s
   (setv todo-items (gtd/get-todos))
   (setv calendar-items (gtd/get-calendar-items))
   (setv today-date (.date (get-now)))
-  ;(setv today-plans (get-today-plans calendar-items today-date))
-  (setv today-plans calendar-items) ; TODO: filter
+  (setv today-plans (get-today-plans calendar-items today-date))
   (setv [due-todos not-due-todos] (split (fn [x] False) todo-items)) ;x.due) todo-items)) ; TODO: fix
   (setv message (compose-message today-date (format-dues due-todos) (sample-todos not-due-todos) today-plans))
   (setv tg-response (send-tg-message message))
