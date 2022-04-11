@@ -1,11 +1,12 @@
 (import
   sys
+  [glob [glob]]
   [datetime [datetime date]]
   [json [dumps loads]]
   [configparser [ConfigParser]]
   [random [sample]]
   [time [sleep]]
-  [os [environ name]]
+  [os [environ name path]]
   [pytz [timezone]])
 (import requests)
 
@@ -15,9 +16,6 @@
 
 (setv config (ConfigParser))
 ((. config read) "config.ini")
-(setv TOKEN-V2 (or (safe-get environ "TOKEN-V2") (get config "notion" "TOKEN-V2")))
-(setv TODOS-ID (or (safe-get environ "TODOS-ID") (get config "notion" "TODOS-ID")))
-(setv CALENDAR-ID (or (safe-get environ "CALENDAR-ID") (get config "notion" "CALENDAR-ID")))
 (setv TELEGRAM-TOKEN (or (safe-get environ "TELEGRAM-TOKEN") (get config "tg" "TOKEN")))
 (setv TELEGRAM-CHAT-ID (or (safe-get environ "TELEGRAM-CHAT-ID") (get config "tg" "CHAT-ID")))
 
@@ -81,15 +79,6 @@
 
 (defn get-now [] (datetime.now :tz (timezone "Europe/Moscow")))
 
-(defn notion/list [id]
-  (-> f"https://api.notion.com/v1/databases/{id}/query"
-    (requests.post :headers {
-    "Authorization" f"Bearer {TOKEN-V2}"
-    "Notion-Version" "2021-05-13"})
-    (. content)
-    loads
-    (get "results")))
-
 (defn send-tg-message [message]
   (->
     (requests.get
@@ -103,12 +92,21 @@
     ((fn [x] (x.decode "utf-8")))
     loads))
 
+(defn gtd/get-items [dir]
+  (lfor filename (glob (path.join "/home/rprtr258/GTD/" dir "*.md"))
+    (.readline (open filename))))
+
+(defn gtd/get-todos [] (gtd/get-items "next_actions"))
+
+(defn gtd/get-calendar-items [] (gtd/get-items "calendar"))
+
 (defn send-notification [] (do
-  (setv todo-items (lfor x (notion/list TODOS-ID) (get x "properties" "Name" "title" 0 "plain_text")))
-  (setv calendar-items (notion/list CALENDAR-ID))
+  (setv todo-items (gtd/get-todos))
+  (setv calendar-items (gtd/get-calendar-items))
   (setv today-date (.date (get-now)))
-  (setv today-plans (get-today-plans calendar-items today-date))
-  (setv [due-todos not-due-todos] (split (fn [x] False) todo-items)) ;x.due) todo-plans)) ; TODO: fix
+  ;(setv today-plans (get-today-plans calendar-items today-date))
+  (setv today-plans ["aboba"])
+  (setv [due-todos not-due-todos] (split (fn [x] False) todo-items)) ;x.due) todo-items)) ; TODO: fix
   (setv message (compose-message today-date (format-dues due-todos) (sample-todos not-due-todos) today-plans))
   (setv tg-response (send-tg-message message))
   (if-not
