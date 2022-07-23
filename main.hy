@@ -48,8 +48,9 @@
 (defn get-today-plans [calendar-items today-date]
   (format-list
     (lfor
-      [title the_date] calendar-items
-      :if (= the_date today-date)
+      [title the_date]
+      calendar-items
+      :if (<= the_date today-date)
       title)))
 
 (defn split [pred lst] [
@@ -135,11 +136,14 @@
 (defn sleep-hour [] (sleep (* 60 60)))
 
 (defn main []
-  (if (and (> (len sys.argv) 1) (= (get sys.argv 1) "--debug")) (send-notification))
+  (if
+    (and (> (len sys.argv) 1) (= (get sys.argv 1) "--debug"))
+    (send-notification))
   (while
     True
-    (if (= (. (get-now) hour) 9) (send-notification))
-      (sleep-hour)))
+    (if (= (. (get-now) hour) 9)
+      (send-notification))
+    (sleep-hour)))
 
 (try
   (main)
