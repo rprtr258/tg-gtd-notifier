@@ -63,8 +63,6 @@ func getTodayTasks(calendarItems []CalendarTask, todayDate time.Time) []Calendar
 	return res
 }
 
-// res = append(res, fmt.Sprintf("(%s) %s", x.When.Format("02.01.2006"), x.Title))
-
 func composeMessage(today time.Time, todayTasks []CalendarTask, todoTasks []Task) string {
 	var res strings.Builder
 	messageTemplate := template.Must(template.New("").Parse(`<b>📆 Сегодня {{.Today.Format "02.01.2006"}}</b>
