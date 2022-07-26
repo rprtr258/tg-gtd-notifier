@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -8,20 +9,16 @@ import (
 	"net/http"
 	"os"
 	"path"
+	"regexp"
 	"strings"
 	"time"
 )
 
 const (
 	_dateFormat   = "02 January 2006"
-	_githubApiURL = "https://api.github.com/repos/rprtr258/gtdBackup/contents/"
+	_githubApiURL = "https://api.github.com/repos/rprtr258/gtd-backup/contents/"
 )
 
-// [tg]
-// TOKEN = 0000000000:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
-// CHAT-ID = 000000000
-// [github]
-// OAUTH = AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
 var (
 	_telegramToken  = os.Getenv("TELEGRAM_TOKEN")
 	_telegramChatID = os.Getenv("TELEGRAM_CHAT_ID")
@@ -32,8 +29,11 @@ var (
 
 type Task struct {
 	Title string
-	// TODO: separate for delayed tasks
-	Date time.Time
+}
+
+type CalendarTask struct {
+	Task
+	When time.Time
 }
 
 func tag(tagName, text string) string {
@@ -41,10 +41,18 @@ func tag(tagName, text string) string {
 }
 
 // TODO: template
-func formatList[A any](xs []A) []string {
+func formatTasks(xs []Task) []string {
 	res := make([]string, 0, len(xs))
 	for _, x := range xs {
-		res = append(res, fmt.Sprintf(" %+v", x))
+		res = append(res, x.Title)
+	}
+	return res
+}
+
+func formatCalendarTasks(xs []CalendarTask) []string {
+	res := make([]string, 0, len(xs))
+	for _, x := range xs {
+		res = append(res, fmt.Sprintf("(%s) %s", x.When.Format("02.01.2006"), x.Title))
 	}
 	return res
 }
@@ -57,53 +65,76 @@ func mySample3[A any](items []A) []A {
 	return items
 }
 
-func formatDues(items []Task) []string {
+func formatDues(items []CalendarTask) []string {
 	res := make([]string, 0, len(items))
 	for _, x := range mySample3(items) {
-		res = append(res, fmt.Sprintf("%s %s", x.Date.Format(_dateFormat), x))
+		res = append(res, fmt.Sprintf("%s %s", x.When.Format(_dateFormat), x))
 	}
 	return res
 }
 
-func getTodayTasks(calendarItems []Task, todayDate time.Time) []Task {
-	res := make([]Task, 0, len(calendarItems))
+func getTodayTasks(calendarItems []CalendarTask, todayDate time.Time) []CalendarTask {
+	res := make([]CalendarTask, 0, len(calendarItems))
 	for _, item := range calendarItems {
-		if item.Date.Before(todayDate) || item.Date.Equal(todayDate) {
+		if item.When.Before(todayDate) || item.When.Equal(todayDate) {
 			res = append(res, item)
 		}
 	}
 	return res
 }
 
-func composeMessage(todayDate time.Time, duePlans, todoPlans, todayTasks []Task) string {
+func composeMessage(todayDate time.Time, duePlans, todayTasks []CalendarTask, todoTasks []Task) string {
 	var lines []string
 	lines = append(lines, tag("b", fmt.Sprintf("📆 Сегодня %s", todayDate.Format(_dateFormat))))
 	lines = append(lines, "")
 	lines = append(lines, tag("i", "🌟 Планы на сегодня:")) // TODO: don't print if empty
-	lines = append(lines, formatList(todayTasks)...)
+	lines = append(lines, formatCalendarTasks(todayTasks)...)
 	lines = append(lines, "")
-	lines = append(lines, tag("i", "⌛ Дедлайны:")) // TODO: implement
-	lines = append(lines, formatDues(duePlans)...)
-	lines = append(lines, "")
+	// TODO: implement
+	// lines = append(lines, tag("i", "⌛ Дедлайны:"))
+	// lines = append(lines, formatDues(duePlans)...)
+	// lines = append(lines, "")
 	lines = append(lines, tag("i", "✨ Что еще можно сделать:"))
-	lines = append(lines, formatList(todoPlans)...)
+	lines = append(lines, formatTasks(todoTasks)...)
 	return strings.Join(lines, "\n")
 }
 
 func sendTgMessage(message string) error {
-	_, err := http.Get(fmt.Sprintf("https://api.telegram.org/bot%s/sendMessage", _telegramToken))
-	// :data {
-	//   "chat_id" TELEGRAMcHATiD
-	//   "parse_mode" "HTML"
-	//   "text" message
-	// }
+	request, err := http.NewRequest(http.MethodGet, fmt.Sprintf("https://api.telegram.org/bot%s/sendMessage", _telegramToken), nil)
 	if err != nil {
 		return err
 	}
-	// TODO: get response json
-	// if !tgResponse["ok"] {
-	// 	return fmt.Errorf("Error occured. Telegram API response: %s", tgResponse)
-	// }
+
+	query := request.URL.Query()
+	query.Add("chat_id", _telegramChatID)
+	query.Add("parse_mode", "HTML")
+	query.Add("text", message)
+	request.URL.RawQuery = query.Encode()
+
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		return err
+	}
+
+	body, err := ioutil.ReadAll(response.Body)
+	if err != nil {
+		return err
+	}
+
+	var v struct {
+		Ok          bool   `json:"ok"`
+		ErrorCode   int    `json:"error_code"`
+		Description string `json:"description"`
+	}
+
+	if err := json.Unmarshal(body, &v); err != nil {
+		return err
+	}
+
+	if !v.Ok {
+		return fmt.Errorf("telegram api error: error_code=%d description=%q", v.ErrorCode, v.Description)
+	}
+
 	return nil
 }
 
@@ -119,10 +150,27 @@ type GithubFileEntry struct {
 	Type        string `json:"type"`
 }
 
+func githubApiRequest(addr string) (*http.Response, error) {
+	request, err := http.NewRequest(http.MethodGet, addr, nil)
+	if err != nil {
+		panic(err.Error())
+	}
+	request.SetBasicAuth("rprtr258", _githubOAuth)
+
+	return http.DefaultClient.Do(request)
+}
+
 func githubApiGetFilesList(dir string) []GithubFileEntry {
+	response, err := githubApiRequest(_githubApiURL + dir)
+	if err != nil {
+		panic(err.Error())
+	}
+
+	s := wtf(ioutil.ReadAll(response.Body))
+
 	var v []GithubFileEntry
-	json.Unmarshal(wtf(ioutil.ReadAll(wtf(http.Get(_githubApiURL+dir)).Body)), &v)
-	// :auth ("rprtr258", GITHUB_OAUTH)
+	json.Unmarshal(s, &v)
+
 	return v
 }
 
@@ -141,19 +189,34 @@ type GithubFileContent struct {
 }
 
 func githubApiGetFileContent(dir, filename string) GithubFileContent {
-	http.Get(_githubApiURL + fmt.Sprintf("%s/%s", dir, filename))
-	// :auth ("rprtr258", GITHUB_OAUTH)
+	response, err := githubApiRequest(_githubApiURL + fmt.Sprintf("%s/%s", dir, filename))
+	if err != nil {
+		panic(err.Error())
+	}
+
+	s := wtf(ioutil.ReadAll(response.Body))
+
 	var v GithubFileContent
-	json.Unmarshal(wtf(ioutil.ReadAll(wtf(http.Get(_githubApiURL+dir)).Body)), &v)
-	// TODO: decode base64, then utf8
+	if err := json.Unmarshal(s, &v); err != nil {
+		panic(err.Error())
+	}
 	return v
 }
 
-func parsePlan(fileContent string) Task {
+func parseCalendarTask(fileContent string) CalendarTask {
+	r := regexp.MustCompile(`Date: (\d{2}\.\d{2}\.\d{4})`).FindSubmatch([]byte(fileContent))
+	lines := strings.Split(fileContent, "\n")
+	return CalendarTask{
+		Task: Task{
+			Title: lines[0],
+		},
+		When: wtf(time.Parse("02.01.2006", string(r[1]))),
+	}
+}
+
+func parseTask(fileContent string) Task {
 	return Task{
 		Title: fileContent,
-		Date:  time.Now(),
-		// Date:  wtf(time.Parse("02.01.2006", string(regexp.MustCompile(`Date: (\d{2}\.\d{2}\.\d{4})`).FindSubmatch([]byte(x))[0]))),
 	}
 }
 
@@ -163,8 +226,32 @@ func gtdGetItems(dir string) []Task {
 		if path.Ext(file.Name) != ".md" {
 			continue
 		}
-		plan := githubApiGetFileContent(dir, file.Name).Content
-		res = append(res, parsePlan(plan))
+
+		tmp := strings.Join(strings.Split(githubApiGetFileContent(dir, file.Name).Content, "\n"), "")
+		plan, err := base64.StdEncoding.DecodeString(tmp)
+		if err != nil {
+			panic(err.Error())
+		}
+
+		res = append(res, parseTask(string(plan)))
+	}
+	return res
+}
+
+func gtdGetCalendarItems(dir string) []CalendarTask {
+	var res []CalendarTask
+	for _, file := range githubApiGetFilesList(dir) {
+		if path.Ext(file.Name) != ".md" {
+			continue
+		}
+
+		tmp := strings.Join(strings.Split(githubApiGetFileContent(dir, file.Name).Content, "\n"), "")
+		taskContent, err := base64.StdEncoding.DecodeString(tmp)
+		if err != nil {
+			panic(err.Error())
+		}
+
+		res = append(res, parseCalendarTask(string(taskContent)))
 	}
 	return res
 }
@@ -179,10 +266,13 @@ func sendNotification() error {
 
 	message := composeMessage(
 		todayDate,
+		[]CalendarTask{},
+		getTodayTasks(gtdGetCalendarItems("calendar"), todayDate),
 		gtdGetItems("next_actions"),
-		[]Task{},
-		getTodayTasks(gtdGetItems("calendar"), todayDate),
 	)
+
+	log.Println(message)
+
 	if err := sendTgMessage(message); err != nil {
 		return err
 	}
@@ -192,7 +282,9 @@ func sendNotification() error {
 
 func run() error {
 	if len(os.Args) > 1 && os.Args[1] == "-debug" {
-		sendNotification()
+		if err := sendNotification(); err != nil {
+			return err
+		}
 	}
 	for {
 		// TODO: cron
@@ -205,16 +297,16 @@ func run() error {
 	}
 }
 
-func main() {
-	if err := run(); err != nil {
-		log.Fatal(err.Error())
-	}
-}
-
 // TODO: remove
 func wtf[A any](a A, err error) A {
 	if err != nil {
 		panic(err.Error())
 	}
 	return a
+}
+
+func main() {
+	if err := run(); err != nil {
+		log.Fatal(err.Error())
+	}
 }
