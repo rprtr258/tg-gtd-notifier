@@ -86,7 +86,7 @@ func composeMessage(todayDate time.Time, duePlans, todoPlans, todayTasks []Task)
 	lines = append(lines, formatDues(duePlans)...)
 	lines = append(lines, "")
 	lines = append(lines, tag("i", "✨ Что еще можно сделать:"))
-	lines = append(lines, todoPlans...)
+	lines = append(lines, formatList(todoPlans)...)
 	return strings.Join(lines, "\n")
 }
 
