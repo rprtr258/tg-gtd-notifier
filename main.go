@@ -67,19 +67,14 @@ func getTodayTasks(calendarItems []CalendarTask, todayDate time.Time) []Calendar
 
 func composeMessage(today time.Time, todayTasks []CalendarTask, todoTasks []Task) string {
 	var res strings.Builder
-	messageTemplate := template.Must(template.New("").Parse(`<b>📆 Сегодня {{(.Today.Format "02.01.2006")}}</b>
-{{if (gt (len .TodayTasks) 0)}}
-<i>🌟 Планы на сегодня:</i>{{range .TodayTasks}}
-- ({{(.When.Format "02.01.2006")}}) {{.Title}}
-{{end}}{{end}}
-{{if (gt (len .DelayedTasks) 0)}}
-<i>⌛ Дедлайны:</i>{{range .DelayedTasks}}
-- ({{(.When.Format "02.01.2006")}}) {{.Title}}
-{{end}}{{end}}
-{{if (gt (len .TodoTasks) 0)}}
-<i>✨ Что еще можно сделать:</i>{{range .TodoTasks}}
-- {{.Title}}
-{{end}}{{end}}`))
+	messageTemplate := template.Must(template.New("").Parse(`<b>📆 Сегодня {{.Today.Format "02.01.2006"}}</b>
+
+{{if (gt (len .TodayTasks) 0)}}<i>🌟 Планы на сегодня:</i>{{range .TodayTasks}}
+- ({{.When.Format "02.01.2006"}}) {{.Title}}{{end}}{{end}}
+{{if (gt (len .DelayedTasks) 0)}}<i>⌛ Дедлайны:</i>{{range .DelayedTasks}}
+- ({{.When.Format "02.01.2006"}}) {{.Title}}{{end}}{{end}}
+{{if (gt (len .TodoTasks) 0)}}<i>✨ Что еще можно сделать:</i>{{range .TodoTasks}}
+- {{.Title}}{{end}}{{end}}`))
 	if err := messageTemplate.Execute(&res, struct {
 		Today      time.Time
 		TodayTasks []CalendarTask
@@ -212,8 +207,9 @@ func parseCalendarTask(fileContent string) CalendarTask {
 }
 
 func parseTask(fileContent string) Task {
+	lines := strings.Split(fileContent, "\n")
 	return Task{
-		Title: fileContent,
+		Title: lines[0],
 	}
 }
 
