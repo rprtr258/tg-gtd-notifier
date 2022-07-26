@@ -25,8 +25,23 @@ var (
 	_telegramChatID = os.Getenv("TELEGRAM_CHAT_ID")
 	_githubOAuth    = os.Getenv("GITHUB_OAUTH")
 
-	_moscowTZ = wtf(time.LoadLocation("Europe/Moscow"))
+	_moscowTZ        = must(time.LoadLocation("Europe/Moscow"))
+	_messageTemplate = must(template.New("").Parse(`<b>📆 Сегодня {{.Today.Format "02.01.2006"}}</b>
+
+{{if (gt (len .TodayTasks) 0)}}<i>🌟 Планы на сегодня:</i>{{range .TodayTasks}}
+- ({{.When.Format "02.01.2006"}}) {{.Title}}{{end}}{{end}}
+{{if (gt (len .DelayedTasks) 0)}}<i>⌛ Дедлайны:</i>{{range .DelayedTasks}}
+- ({{.When.Format "02.01.2006"}}) {{.Title}}{{end}}{{end}}
+{{if (gt (len .NextActions) 0)}}<i>✨ Что еще можно сделать:</i>{{range .TodoTasks}}
+- {{.Title}}{{end}}{{end}}`))
 )
+
+func must[A any](a A, err error) A {
+	if err != nil {
+		panic(err.Error())
+	}
+	return a
+}
 
 type Task struct {
 	Title string
@@ -63,26 +78,18 @@ func getTodayTasks(calendarItems []CalendarTask, todayDate time.Time) []Calendar
 	return res
 }
 
-func composeMessage(today time.Time, todayTasks []CalendarTask, todoTasks []Task) string {
+func composeMessage(today time.Time, todayTasks []CalendarTask, nextActionsTasks []Task) string {
 	var res strings.Builder
-	messageTemplate := template.Must(template.New("").Parse(`<b>📆 Сегодня {{.Today.Format "02.01.2006"}}</b>
-
-{{if (gt (len .TodayTasks) 0)}}<i>🌟 Планы на сегодня:</i>{{range .TodayTasks}}
-- ({{.When.Format "02.01.2006"}}) {{.Title}}{{end}}{{end}}
-{{if (gt (len .DelayedTasks) 0)}}<i>⌛ Дедлайны:</i>{{range .DelayedTasks}}
-- ({{.When.Format "02.01.2006"}}) {{.Title}}{{end}}{{end}}
-{{if (gt (len .TodoTasks) 0)}}<i>✨ Что еще можно сделать:</i>{{range .TodoTasks}}
-- {{.Title}}{{end}}{{end}}`))
-	if err := messageTemplate.Execute(&res, struct {
-		Today      time.Time
-		TodayTasks []CalendarTask
-		TodoTasks  []Task
+	if err := _messageTemplate.Execute(&res, struct {
+		Today       time.Time
+		TodayTasks  []CalendarTask
+		NextActions []Task
 		// TODO: implement
 		DelayedTasks []CalendarTask
 	}{
-		Today:      today,
-		TodayTasks: todayTasks,
-		TodoTasks:  todoTasks,
+		Today:       today,
+		TodayTasks:  todayTasks,
+		NextActions: nextActionsTasks,
 	}); err != nil {
 		panic(err.Error())
 	}
@@ -140,28 +147,29 @@ type GithubFileEntry struct {
 	Type        string `json:"type"`
 }
 
-func githubApiRequest(addr string) (*http.Response, error) {
+func githubApiRequest[A any](addr string) (*A, error) {
 	request, err := http.NewRequest(http.MethodGet, addr, nil)
 	if err != nil {
-		panic(err.Error())
+		return nil, err
 	}
 	request.SetBasicAuth("rprtr258", _githubOAuth)
 
-	return http.DefaultClient.Do(request)
-}
-
-func githubApiGetFilesList(dir string) []GithubFileEntry {
-	response, err := githubApiRequest(_githubApiURL + dir)
+	response, err := http.DefaultClient.Do(request)
 	if err != nil {
-		panic(err.Error())
+		return nil, err
 	}
 
-	s := wtf(ioutil.ReadAll(response.Body))
+	s, err := ioutil.ReadAll(response.Body)
+	if err != nil {
+		return nil, err
+	}
 
-	var v []GithubFileEntry
-	json.Unmarshal(s, &v)
+	var v A
+	if err := json.Unmarshal(s, &v); err != nil {
+		return nil, fmt.Errorf("error parsing json into %T: %q", v, string(s))
+	}
 
-	return v
+	return &v, nil
 }
 
 type GithubFileContent struct {
@@ -178,19 +186,16 @@ type GithubFileContent struct {
 	Encoding    string `json:"encoding"`
 }
 
-func githubApiGetFileContent(dir, filename string) GithubFileContent {
-	response, err := githubApiRequest(_githubApiURL + fmt.Sprintf("%s/%s", dir, filename))
+func githubApiGetFilesList(dir string) ([]GithubFileEntry, error) {
+	res, err := githubApiRequest[[]GithubFileEntry](_githubApiURL + dir)
 	if err != nil {
-		panic(err.Error())
+		return nil, err
 	}
+	return *res, nil
+}
 
-	s := wtf(ioutil.ReadAll(response.Body))
-
-	var v GithubFileContent
-	if err := json.Unmarshal(s, &v); err != nil {
-		panic(err.Error())
-	}
-	return v
+func githubApiGetFileContent(dir, filename string) (*GithubFileContent, error) {
+	return githubApiRequest[GithubFileContent](_githubApiURL + fmt.Sprintf("%s/%s", dir, filename))
 }
 
 func parseCalendarTask(fileContent string) CalendarTask {
@@ -200,7 +205,7 @@ func parseCalendarTask(fileContent string) CalendarTask {
 		Task: Task{
 			Title: lines[0],
 		},
-		When: wtf(time.Parse("02.01.2006", string(r[1]))),
+		When: must(time.Parse("02.01.2006", string(r[1]))),
 	}
 }
 
@@ -211,15 +216,24 @@ func parseTask(fileContent string) Task {
 	}
 }
 
-func listMDFiles(dir string) []string {
-	allFiles := githubApiGetFilesList(dir)
+func listMDFiles(dir string) ([]string, error) {
+	allFiles, err := githubApiGetFilesList(dir)
+	if err != nil {
+		return nil, err
+	}
+
 	res := make([]string, 0, len(allFiles))
 	for _, file := range allFiles {
 		if path.Ext(file.Name) != ".md" {
 			continue
 		}
 
-		tmp := strings.Join(strings.Split(githubApiGetFileContent(dir, file.Name).Content, "\n"), "")
+		content, err := githubApiGetFileContent(dir, file.Name)
+		if err != nil {
+			return nil, err
+		}
+
+		tmp := strings.Join(strings.Split(content.Content, "\n"), "")
 		taskContent, err := base64.StdEncoding.DecodeString(tmp)
 		if err != nil {
 			panic(err.Error())
@@ -227,23 +241,31 @@ func listMDFiles(dir string) []string {
 
 		res = append(res, string(taskContent))
 	}
-	return res
+	return res, nil
 }
 
-func gtdGetItems(dir string) []Task {
+func gtdGetItems(dir string) ([]Task, error) {
 	var res []Task
-	for _, taskContent := range listMDFiles(dir) {
+	files, err := listMDFiles(dir)
+	if err != nil {
+		return nil, err
+	}
+	for _, taskContent := range files {
 		res = append(res, parseTask(taskContent))
 	}
-	return res
+	return res, nil
 }
 
-func gtdGetCalendarItems(dir string) []CalendarTask {
+func gtdGetCalendarItems(dir string) ([]CalendarTask, error) {
 	var res []CalendarTask
-	for _, taskContent := range listMDFiles(dir) {
+	files, err := listMDFiles(dir)
+	if err != nil {
+		return nil, err
+	}
+	for _, taskContent := range files {
 		res = append(res, parseCalendarTask(string(taskContent)))
 	}
-	return res
+	return res, nil
 }
 
 func getTodayDate() time.Time {
@@ -254,10 +276,20 @@ func getTodayDate() time.Time {
 func run() error {
 	today := getTodayDate()
 
+	calendarTasks, err := gtdGetCalendarItems("calendar")
+	if err != nil {
+		return err
+	}
+
+	nextActionsTasks, err := gtdGetItems("next_actions")
+	if err != nil {
+		return err
+	}
+
 	message := composeMessage(
 		today,
-		getTodayTasks(gtdGetCalendarItems("calendar"), today),
-		gtdGetItems("next_actions"),
+		getTodayTasks(calendarTasks, today),
+		nextActionsTasks,
 	)
 
 	if err := sendTgMessage(message); err != nil {
@@ -265,14 +297,6 @@ func run() error {
 	}
 
 	return nil
-}
-
-// TODO: remove
-func wtf[A any](a A, err error) A {
-	if err != nil {
-		panic(err.Error())
-	}
-	return a
 }
 
 // TODO: cron 0 9 * * *
