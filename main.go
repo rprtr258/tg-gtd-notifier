@@ -220,27 +220,10 @@ func parseTask(fileContent string) Task {
 	}
 }
 
-func gtdGetItems(dir string) []Task {
-	var res []Task
-	for _, file := range githubApiGetFilesList(dir) {
-		if path.Ext(file.Name) != ".md" {
-			continue
-		}
-
-		tmp := strings.Join(strings.Split(githubApiGetFileContent(dir, file.Name).Content, "\n"), "")
-		plan, err := base64.StdEncoding.DecodeString(tmp)
-		if err != nil {
-			panic(err.Error())
-		}
-
-		res = append(res, parseTask(string(plan)))
-	}
-	return res
-}
-
-func gtdGetCalendarItems(dir string) []CalendarTask {
-	var res []CalendarTask
-	for _, file := range githubApiGetFilesList(dir) {
+func listMDFiles(dir string) []string {
+	allFiles := githubApiGetFilesList(dir)
+	res := make([]string, 0, len(allFiles))
+	for _, file := range allFiles {
 		if path.Ext(file.Name) != ".md" {
 			continue
 		}
@@ -251,6 +234,22 @@ func gtdGetCalendarItems(dir string) []CalendarTask {
 			panic(err.Error())
 		}
 
+		res = append(res, string(taskContent))
+	}
+	return res
+}
+
+func gtdGetItems(dir string) []Task {
+	var res []Task
+	for _, taskContent := range listMDFiles(dir) {
+		res = append(res, parseTask(taskContent))
+	}
+	return res
+}
+
+func gtdGetCalendarItems(dir string) []CalendarTask {
+	var res []CalendarTask
+	for _, taskContent := range listMDFiles(dir) {
 		res = append(res, parseCalendarTask(string(taskContent)))
 	}
 	return res
@@ -270,8 +269,6 @@ func sendNotification() error {
 		getTodayTasks(gtdGetCalendarItems("calendar"), todayDate),
 		gtdGetItems("next_actions"),
 	)
-
-	log.Println(message)
 
 	if err := sendTgMessage(message); err != nil {
 		return err
