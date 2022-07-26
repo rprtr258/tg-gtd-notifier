@@ -259,7 +259,7 @@ func getNow() time.Time {
 	return time.Now().In(_moscowTZ)
 }
 
-func sendNotification() error {
+func run() error {
 	now := getNow()
 	todayDate := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, _moscowTZ)
 
@@ -277,23 +277,6 @@ func sendNotification() error {
 	return nil
 }
 
-func run() error {
-	if len(os.Args) > 1 && os.Args[1] == "-debug" {
-		if err := sendNotification(); err != nil {
-			return err
-		}
-	}
-	for {
-		// TODO: cron
-		if getNow().Hour() == 9 {
-			if err := sendNotification(); err != nil {
-				return err
-			}
-		}
-		time.Sleep(time.Hour)
-	}
-}
-
 // TODO: remove
 func wtf[A any](a A, err error) A {
 	if err != nil {
@@ -302,6 +285,7 @@ func wtf[A any](a A, err error) A {
 	return a
 }
 
+// TODO: cron 0 9 * * *
 func main() {
 	if err := run(); err != nil {
 		log.Fatal(err.Error())
