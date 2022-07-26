@@ -11,6 +11,7 @@ import (
 	"path"
 	"regexp"
 	"strings"
+	"text/template"
 	"time"
 )
 
@@ -34,27 +35,6 @@ type Task struct {
 type CalendarTask struct {
 	Task
 	When time.Time
-}
-
-func tag(tagName, text string) string {
-	return fmt.Sprintf("<%[1]s>%[2]s</%[1]s>", tagName, text)
-}
-
-// TODO: template
-func formatTasks(xs []Task) []string {
-	res := make([]string, 0, len(xs))
-	for _, x := range xs {
-		res = append(res, x.Title)
-	}
-	return res
-}
-
-func formatCalendarTasks(xs []CalendarTask) []string {
-	res := make([]string, 0, len(xs))
-	for _, x := range xs {
-		res = append(res, fmt.Sprintf("(%s) %s", x.When.Format("02.01.2006"), x.Title))
-	}
-	return res
 }
 
 func mySample3[A any](items []A) []A {
@@ -83,20 +63,37 @@ func getTodayTasks(calendarItems []CalendarTask, todayDate time.Time) []Calendar
 	return res
 }
 
-func composeMessage(todayDate time.Time, duePlans, todayTasks []CalendarTask, todoTasks []Task) string {
-	var lines []string
-	lines = append(lines, tag("b", fmt.Sprintf("📆 Сегодня %s", todayDate.Format(_dateFormat))))
-	lines = append(lines, "")
-	lines = append(lines, tag("i", "🌟 Планы на сегодня:")) // TODO: don't print if empty
-	lines = append(lines, formatCalendarTasks(todayTasks)...)
-	lines = append(lines, "")
+// res = append(res, fmt.Sprintf("(%s) %s", x.When.Format("02.01.2006"), x.Title))
+
+func composeMessage(today time.Time, todayTasks []CalendarTask, todoTasks []Task) string {
 	// TODO: implement
 	// lines = append(lines, tag("i", "⌛ Дедлайны:"))
 	// lines = append(lines, formatDues(duePlans)...)
 	// lines = append(lines, "")
-	lines = append(lines, tag("i", "✨ Что еще можно сделать:"))
-	lines = append(lines, formatTasks(todoTasks)...)
-	return strings.Join(lines, "\n")
+	var res strings.Builder
+	messageTemplate := template.Must(template.New("").Parse(`<b>📆 Сегодня {{(.Today.Format "02.01.2006")}}</b>
+
+<i>🌟 Планы на сегодня:</i>
+{{range .TodayTasks}}
+- ({{(.When.Format "02.01.2006")}}) {{.Title}}
+{{end}}
+
+<i>✨ Что еще можно сделать:</i>
+{{range .TodoTasks}}
+- {{.Title}}
+{{end}}`))
+	if err := messageTemplate.Execute(&res, struct {
+		Today      time.Time
+		TodayTasks []CalendarTask
+		TodoTasks  []Task
+	}{
+		Today:      today,
+		TodayTasks: todayTasks,
+		TodoTasks:  todoTasks,
+	}); err != nil {
+		panic(err.Error())
+	}
+	return res.String()
 }
 
 func sendTgMessage(message string) error {
@@ -255,18 +252,17 @@ func gtdGetCalendarItems(dir string) []CalendarTask {
 	return res
 }
 
-func getNow() time.Time {
-	return time.Now().In(_moscowTZ)
+func getTodayDate() time.Time {
+	now := time.Now().In(_moscowTZ)
+	return time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, _moscowTZ)
 }
 
 func run() error {
-	now := getNow()
-	todayDate := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, _moscowTZ)
+	today := getTodayDate()
 
 	message := composeMessage(
-		todayDate,
-		[]CalendarTask{},
-		getTodayTasks(gtdGetCalendarItems("calendar"), todayDate),
+		today,
+		getTodayTasks(gtdGetCalendarItems("calendar"), today),
 		gtdGetItems("next_actions"),
 	)
 
