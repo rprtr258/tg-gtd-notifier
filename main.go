@@ -37,7 +37,7 @@ type Task struct {
 }
 
 func tag(tagName, text string) string {
-	return fmt.Sprintf("<%[1]>%[2]</%[1]>", tagName, text)
+	return fmt.Sprintf("<%[1]s>%[2]s</%[1]s>", tagName, text)
 }
 
 // TODO: template
@@ -91,12 +91,15 @@ func composeMessage(todayDate time.Time, duePlans, todoPlans, todayTasks []Task)
 }
 
 func sendTgMessage(message string) error {
-	http.Get(fmt.Sprintf("https://api.telegram.org/bot%s/sendMessage", _telegramToken))
+	_, err := http.Get(fmt.Sprintf("https://api.telegram.org/bot%s/sendMessage", _telegramToken))
 	// :data {
 	//   "chat_id" TELEGRAMcHATiD
 	//   "parse_mode" "HTML"
 	//   "text" message
 	// }
+	if err != nil {
+		return err
+	}
 	// TODO: get response json
 	// if !tgResponse["ok"] {
 	// 	return fmt.Errorf("Error occured. Telegram API response: %s", tgResponse)
