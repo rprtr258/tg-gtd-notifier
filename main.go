@@ -32,7 +32,7 @@ var (
 - ({{.When.Format "02.01.2006"}}) {{.Title}}{{end}}{{end}}
 {{if (gt (len .DelayedTasks) 0)}}<i>⌛ Дедлайны:</i>{{range .DelayedTasks}}
 - ({{.When.Format "02.01.2006"}}) {{.Title}}{{end}}{{end}}
-{{if (gt (len .NextActions) 0)}}<i>✨ Что еще можно сделать:</i>{{range .TodoTasks}}
+{{if (gt (len .NextActions) 0)}}<i>✨ Что еще можно сделать:</i>{{range .NextActions}}
 - {{.Title}}{{end}}{{end}}`))
 )
 
