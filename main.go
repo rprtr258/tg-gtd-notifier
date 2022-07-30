@@ -26,6 +26,8 @@ var (
 	_telegramChatID = must(getEnv("TELEGRAM_CHAT_ID"))
 	_githubOAuth    = must(getEnv("GITHUB_OAUTH"))
 
+	_telegramApiURL = fmt.Sprintf("https://api.telegram.org/bot%s/sendMessage", _telegramToken)
+
 	_dateRegex       = regexp.MustCompile(`Date: (\d{2}\.\d{2}\.\d{4})`)
 	_moscowTZ        = must(time.LoadLocation("Europe/Moscow"))
 	_messageTemplate = must(template.New("").Parse(`<b>📆 Сегодня {{.Today.Format "02 January 2006"}}</b>{{if (gt (len .TodayTasks) 0)}}
@@ -127,13 +129,13 @@ type CalendarTask struct {
 	When time.Time
 }
 
-func mySample3[A any](items []A) []A {
-	if len(items) < 3 {
+func sample[A any](items []A, k int) []A {
+	if len(items) < k {
 		return items
 	}
 	perm := rand.Perm(len(items))
-	res := make([]A, 0, 3)
-	for i := 0; i < len(perm) && i < 3; i++ {
+	res := make([]A, 0, k)
+	for i := 0; i < len(perm) && i < k; i++ {
 		res = append(res, items[perm[i]])
 	}
 	return res
@@ -141,7 +143,7 @@ func mySample3[A any](items []A) []A {
 
 func formatDues(items []CalendarTask) []string {
 	res := make([]string, 0, len(items))
-	for _, x := range mySample3(items) {
+	for _, x := range items {
 		res = append(res, fmt.Sprintf("%s %s", x.When.Format(_dateFormat), x))
 	}
 	return res
@@ -176,7 +178,7 @@ func composeMessage(today time.Time, todayTasks []CalendarTask, nextActionsTasks
 }
 
 func sendTgMessage(message string) error {
-	request, err := http.NewRequest(http.MethodGet, fmt.Sprintf("https://api.telegram.org/bot%s/sendMessage", _telegramToken), nil)
+	request, err := http.NewRequest(http.MethodGet, _telegramApiURL, nil)
 	if err != nil {
 		return err
 	}
@@ -221,7 +223,7 @@ func parseCalendarTask(fileContent string) CalendarTask {
 		Task: Task{
 			Title: lines[0],
 		},
-		When: must(time.Parse("02.01.2006", string(r[1]))),
+		When: must(time.Parse("02.01.2006-07:00", string(r[1])+"+03:00")),
 	}
 }
 
@@ -306,7 +308,7 @@ func run() error {
 	message := composeMessage(
 		today,
 		todayTasks,
-		mySample3(nextActionsTasks),
+		sample(nextActionsTasks, 3),
 	)
 
 	if err := sendTgMessage(message); err != nil {
