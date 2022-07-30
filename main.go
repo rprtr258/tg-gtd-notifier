@@ -28,7 +28,7 @@ var (
 
 	_telegramApiURL = fmt.Sprintf("https://api.telegram.org/bot%s/sendMessage", _telegramToken)
 
-	_dateRegex       = regexp.MustCompile(`Date: (\d{2}\.\d{2}\.\d{4})`)
+	_dateRegex       = regexp.MustCompile(`(Date|Until): (\d{2}\.\d{2}\.\d{4})`)
 	_moscowTZ        = must(time.LoadLocation("Europe/Moscow"))
 	_messageTemplate = must(template.New("").Parse(`<b>📆 Сегодня {{.Today.Format "02 January 2006"}}</b>{{if gt (len .TodayTasks) 0}}
 
@@ -126,7 +126,8 @@ type Task struct {
 
 type CalendarTask struct {
 	Task
-	When time.Time
+	When    time.Time
+	Delayed bool
 }
 
 func sample[A any](items []A, k int) []A {
@@ -141,37 +142,36 @@ func sample[A any](items []A, k int) []A {
 	return res
 }
 
-func formatDues(items []CalendarTask) []string {
-	res := make([]string, 0, len(items))
-	for _, x := range items {
-		res = append(res, fmt.Sprintf("%s %s", x.When.Format(_dateFormat), x))
-	}
-	return res
-}
-
 func getTodayTasks(calendarItems []CalendarTask, todayDate time.Time) []CalendarTask {
 	res := make([]CalendarTask, 0, len(calendarItems))
 	for _, item := range calendarItems {
-		if item.When.Before(todayDate) || item.When.Equal(todayDate) {
+		if !item.Delayed && (item.When.Before(todayDate) || item.When.Equal(todayDate)) {
 			res = append(res, item)
 		}
 	}
 	return res
 }
 
-func composeMessage(today time.Time, todayTasks []CalendarTask, nextActionsTasks []Task) string {
+func getDelayedTasks(calendarItems []CalendarTask) []CalendarTask {
+	res := make([]CalendarTask, 0, len(calendarItems))
+	for _, item := range calendarItems {
+		if item.Delayed {
+			res = append(res, item)
+		}
+	}
+	return res
+}
+
+type messageData struct {
+	Today        time.Time
+	TodayTasks   []CalendarTask
+	NextActions  []Task
+	DelayedTasks []CalendarTask
+}
+
+func composeMessage(messageData messageData) string {
 	var res strings.Builder
-	if err := _messageTemplate.Execute(&res, struct {
-		Today       time.Time
-		TodayTasks  []CalendarTask
-		NextActions []Task
-		// TODO: implement
-		DelayedTasks []CalendarTask
-	}{
-		Today:       today,
-		TodayTasks:  todayTasks,
-		NextActions: nextActionsTasks,
-	}); err != nil {
+	if err := _messageTemplate.Execute(&res, messageData); err != nil {
 		panic(err.Error())
 	}
 	return res.String()
@@ -223,7 +223,8 @@ func parseCalendarTask(fileContent string) CalendarTask {
 		Task: Task{
 			Title: strings.Trim(lines[0], "# "),
 		},
-		When: must(time.Parse("02.01.2006-07:00", string(r[1])+"+03:00")),
+		When:    must(time.Parse("02.01.2006-07:00", string(r[2])+"+03:00")),
+		Delayed: string(r[1]) == "Until",
 	}
 }
 
@@ -299,17 +300,19 @@ func run() error {
 		return err
 	}
 	todayTasks := getTodayTasks(calendarTasks, today)
+	delayedTasks := getDelayedTasks(calendarTasks)
 
 	nextActionsTasks, err := gtdGetItems("next_actions")
 	if err != nil {
 		return err
 	}
 
-	message := composeMessage(
-		today,
-		todayTasks,
-		sample(nextActionsTasks, 3),
-	)
+	message := composeMessage(messageData{
+		Today:        today,
+		TodayTasks:   todayTasks,
+		NextActions:  sample(nextActionsTasks, 3),
+		DelayedTasks: delayedTasks,
+	})
 
 	if err := sendTgMessage(message); err != nil {
 		return err
@@ -318,7 +321,6 @@ func run() error {
 	return nil
 }
 
-// TODO: cron 0 9 * * *
 func main() {
 	if err := run(); err != nil {
 		log.Fatal(err.Error())
