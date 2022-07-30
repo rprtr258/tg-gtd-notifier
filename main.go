@@ -47,6 +47,69 @@ func must[A any](a A, err error) A {
 	return a
 }
 
+type GithubFileEntry struct {
+	Name        string `json:"name"`
+	Path        string `json:"path"`
+	Sha         string `json:"sha"`
+	Size        uint   `json:"size"`
+	URL         string `json:"url"`
+	HTMLURL     string `json:"html_url"`
+	GITURL      string `json:"git_url"`
+	DownloadURL string `json:"download_url"`
+	Type        string `json:"type"`
+}
+
+func githubApiRequest[A any](addr string) (*A, error) {
+	request, err := http.NewRequest(http.MethodGet, addr, nil)
+	if err != nil {
+		return nil, err
+	}
+	request.SetBasicAuth("rprtr258", _githubOAuth)
+
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		return nil, err
+	}
+
+	s, err := ioutil.ReadAll(response.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	var v A
+	if err := json.Unmarshal(s, &v); err != nil {
+		return nil, fmt.Errorf("error parsing json into %T: %q", v, string(s))
+	}
+
+	return &v, nil
+}
+
+type GithubFileContent struct {
+	Name        string `json:"name"`
+	Path        string `json:"path"`
+	Sha         string `json:"sha"`
+	Size        uint   `json:"size"`
+	URL         string `json:"url"`
+	HTMLURL     string `json:"html_url"`
+	GITURL      string `json:"git_url"`
+	DownloadURL string `json:"download_url"`
+	Type        string `json:"type"`
+	Content     string `json:"content"`
+	Encoding    string `json:"encoding"`
+}
+
+func githubApiGetFilesList(dir string) ([]GithubFileEntry, error) {
+	res, err := githubApiRequest[[]GithubFileEntry](_githubApiURL + dir)
+	if err != nil {
+		return nil, err
+	}
+	return *res, nil
+}
+
+func githubApiGetFileContent(dir, filename string) (*GithubFileContent, error) {
+	return githubApiRequest[GithubFileContent](_githubApiURL + fmt.Sprintf("%s/%s", dir, filename))
+}
+
 type Task struct {
 	Title string
 }
@@ -141,69 +204,6 @@ func sendTgMessage(message string) error {
 	}
 
 	return nil
-}
-
-type GithubFileEntry struct {
-	Name        string `json:"name"`
-	Path        string `json:"path"`
-	Sha         string `json:"sha"`
-	Size        uint   `json:"size"`
-	URL         string `json:"url"`
-	HTMLURL     string `json:"html_url"`
-	GITURL      string `json:"git_url"`
-	DownloadURL string `json:"download_url"`
-	Type        string `json:"type"`
-}
-
-func githubApiRequest[A any](addr string) (*A, error) {
-	request, err := http.NewRequest(http.MethodGet, addr, nil)
-	if err != nil {
-		return nil, err
-	}
-	request.SetBasicAuth("rprtr258", _githubOAuth)
-
-	response, err := http.DefaultClient.Do(request)
-	if err != nil {
-		return nil, err
-	}
-
-	s, err := ioutil.ReadAll(response.Body)
-	if err != nil {
-		return nil, err
-	}
-
-	var v A
-	if err := json.Unmarshal(s, &v); err != nil {
-		return nil, fmt.Errorf("error parsing json into %T: %q", v, string(s))
-	}
-
-	return &v, nil
-}
-
-type GithubFileContent struct {
-	Name        string `json:"name"`
-	Path        string `json:"path"`
-	Sha         string `json:"sha"`
-	Size        uint   `json:"size"`
-	URL         string `json:"url"`
-	HTMLURL     string `json:"html_url"`
-	GITURL      string `json:"git_url"`
-	DownloadURL string `json:"download_url"`
-	Type        string `json:"type"`
-	Content     string `json:"content"`
-	Encoding    string `json:"encoding"`
-}
-
-func githubApiGetFilesList(dir string) ([]GithubFileEntry, error) {
-	res, err := githubApiRequest[[]GithubFileEntry](_githubApiURL + dir)
-	if err != nil {
-		return nil, err
-	}
-	return *res, nil
-}
-
-func githubApiGetFileContent(dir, filename string) (*GithubFileContent, error) {
-	return githubApiRequest[GithubFileContent](_githubApiURL + fmt.Sprintf("%s/%s", dir, filename))
 }
 
 func parseCalendarTask(fileContent string) CalendarTask {
