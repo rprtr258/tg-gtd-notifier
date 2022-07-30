@@ -22,9 +22,9 @@ const (
 )
 
 var (
-	_telegramToken  = os.Getenv("TELEGRAM_TOKEN")
-	_telegramChatID = os.Getenv("TELEGRAM_CHAT_ID")
-	_githubOAuth    = os.Getenv("GITHUB_OAUTH")
+	_telegramToken  = must(getEnv("TELEGRAM_TOKEN"))
+	_telegramChatID = must(getEnv("TELEGRAM_CHAT_ID"))
+	_githubOAuth    = must(getEnv("GITHUB_OAUTH"))
 
 	_dateRegex       = regexp.MustCompile(`Date: (\d{2}\.\d{2}\.\d{4})`)
 	_moscowTZ        = must(time.LoadLocation("Europe/Moscow"))
@@ -39,6 +39,14 @@ var (
 <i>✨ Что еще можно сделать:</i>{{range .NextActions}}
 - {{.Title}}{{end}}{{end}}`))
 )
+
+func getEnv(key string) (string, error) {
+	res, ok := os.LookupEnv(key)
+	if !ok {
+		return "", fmt.Errorf("not found in env: %q", key)
+	}
+	return res, nil
+}
 
 func must[A any](a A, err error) A {
 	if err != nil {
@@ -288,6 +296,7 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	todayTasks := getTodayTasks(calendarTasks, today)
 
 	nextActionsTasks, err := gtdGetItems("next_actions")
 	if err != nil {
@@ -296,8 +305,8 @@ func run() error {
 
 	message := composeMessage(
 		today,
-		getTodayTasks(calendarTasks, today),
-		nextActionsTasks,
+		todayTasks,
+		mySample3(nextActionsTasks),
 	)
 
 	if err := sendTgMessage(message); err != nil {
