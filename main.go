@@ -30,13 +30,13 @@ var (
 
 	_dateRegex       = regexp.MustCompile(`Date: (\d{2}\.\d{2}\.\d{4})`)
 	_moscowTZ        = must(time.LoadLocation("Europe/Moscow"))
-	_messageTemplate = must(template.New("").Parse(`<b>📆 Сегодня {{.Today.Format "02 January 2006"}}</b>{{if (gt (len .TodayTasks) 0)}}
+	_messageTemplate = must(template.New("").Parse(`<b>📆 Сегодня {{.Today.Format "02 January 2006"}}</b>{{if gt (len .TodayTasks) 0}}
 
 <i>🌟 Планы на сегодня:</i>{{range .TodayTasks}}
-- ({{.When.Format "02.01.2006"}}) {{.Title}}{{end}}{{end}}{{if (gt (len .DelayedTasks) 0)}}
+- {{if (.When.Before $.Today)}}({{.When.Format "02.01.2006"}}) {{end}}{{.Title}}{{end}}{{end}}{{if gt (len .DelayedTasks) 0}}
 
 <i>⌛ Дедлайны:</i>{{range .DelayedTasks}}
-- ({{.When.Format "02.01.2006"}}) {{.Title}}{{end}}{{end}}{{if (gt (len .NextActions) 0)}}
+- ({{.When.Format "02.01.2006"}}) {{.Title}}{{end}}{{end}}{{if gt (len .NextActions) 0}}
 
 <i>✨ Что еще можно сделать:</i>{{range .NextActions}}
 - {{.Title}}{{end}}{{end}}`))
@@ -221,7 +221,7 @@ func parseCalendarTask(fileContent string) CalendarTask {
 	lines := strings.Split(fileContent, "\n")
 	return CalendarTask{
 		Task: Task{
-			Title: lines[0],
+			Title: strings.Trim(lines[0], "# "),
 		},
 		When: must(time.Parse("02.01.2006-07:00", string(r[1])+"+03:00")),
 	}
