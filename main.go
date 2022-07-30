@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"math/rand"
 	"net/http"
 	"os"
 	"path"
@@ -25,14 +26,15 @@ var (
 	_telegramChatID = os.Getenv("TELEGRAM_CHAT_ID")
 	_githubOAuth    = os.Getenv("GITHUB_OAUTH")
 
+	_dateRegex       = regexp.MustCompile(`Date: (\d{2}\.\d{2}\.\d{4})`)
 	_moscowTZ        = must(time.LoadLocation("Europe/Moscow"))
-	_messageTemplate = must(template.New("").Parse(`<b>📆 Сегодня {{.Today.Format "02.01.2006"}}</b>
+	_messageTemplate = must(template.New("").Parse(`<b>📆 Сегодня {{.Today.Format "02 January 2006"}}</b>{{if (gt (len .TodayTasks) 0)}}
 
-{{if (gt (len .TodayTasks) 0)}}<i>🌟 Планы на сегодня:</i>{{range .TodayTasks}}
-- ({{.When.Format "02.01.2006"}}) {{.Title}}{{end}}{{end}}
-{{if (gt (len .DelayedTasks) 0)}}<i>⌛ Дедлайны:</i>{{range .DelayedTasks}}
-- ({{.When.Format "02.01.2006"}}) {{.Title}}{{end}}{{end}}
-{{if (gt (len .NextActions) 0)}}<i>✨ Что еще можно сделать:</i>{{range .NextActions}}
+<i>🌟 Планы на сегодня:</i>{{range .TodayTasks}}
+- ({{.When.Format "02.01.2006"}}) {{.Title}}{{end}}{{end}}{{if (gt (len .DelayedTasks) 0)}}
+<i>⌛ Дедлайны:</i>{{range .DelayedTasks}}
+- ({{.When.Format "02.01.2006"}}) {{.Title}}{{end}}{{end}}{{if (gt (len .NextActions) 0)}}
+<i>✨ Что еще можно сделать:</i>{{range .NextActions}}
 - {{.Title}}{{end}}{{end}}`))
 )
 
@@ -56,8 +58,12 @@ func mySample3[A any](items []A) []A {
 	if len(items) < 3 {
 		return items
 	}
-	// TODO: sample 3 items out of `items`
-	return items
+	perm := rand.Perm(len(items))
+	res := make([]A, 0, 3)
+	for i := 0; i < len(perm) && i < 3; i++ {
+		res = append(res, items[perm[i]])
+	}
+	return res
 }
 
 func formatDues(items []CalendarTask) []string {
@@ -199,7 +205,7 @@ func githubApiGetFileContent(dir, filename string) (*GithubFileContent, error) {
 }
 
 func parseCalendarTask(fileContent string) CalendarTask {
-	r := regexp.MustCompile(`Date: (\d{2}\.\d{2}\.\d{4})`).FindSubmatch([]byte(fileContent))
+	r := _dateRegex.FindSubmatch([]byte(fileContent))
 	lines := strings.Split(fileContent, "\n")
 	return CalendarTask{
 		Task: Task{

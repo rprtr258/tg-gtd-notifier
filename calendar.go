@@ -11,7 +11,7 @@ import (
 
 const _dir = "/home/rprtr258/GTD/calendar"
 
-func main() {
+func f() {
 	f, _ := os.ReadDir(_dir)
 	for _, x := range f {
 		if path.Ext(x.Name()) != ".md" {
