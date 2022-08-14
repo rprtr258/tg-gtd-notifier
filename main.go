@@ -322,6 +322,7 @@ func run() error {
 }
 
 func main() {
+	rand.Seed(time.Now().Unix())
 	if err := run(); err != nil {
 		log.Fatal(err.Error())
 	}
