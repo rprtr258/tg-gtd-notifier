@@ -321,6 +321,7 @@ func run() error {
 			})
 
 			msg := tg.NewMessage(int64(_telegramChatID), message)
+			msg.ParseMode = "HTML"
 			if _, err := bot.Send(msg); err != nil {
 				return err
 			}
