@@ -1,6 +1,6 @@
 appdirs==1.4.4
 astor==0.8.1
-certifi==2021.5.30
+certifi==2022.12.7
 chardet==4.0.0
 colorama==0.4.4
 funcparserlib==0.3.6
