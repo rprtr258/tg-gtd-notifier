@@ -1,22 +1,27 @@
 package main
 
 import (
+	"bytes"
+	"encoding"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 	"math/rand"
 	"net/http"
 	"os"
 	"path"
-	"regexp"
 	"strconv"
 	"strings"
 	"text/template"
 	"time"
 
 	tg "github.com/go-telegram-bot-api/telegram-bot-api/v5"
+	gm "github.com/yuin/goldmark"
+	"github.com/yuin/goldmark/text"
+	"gopkg.in/yaml.v2"
 )
 
 const (
@@ -29,7 +34,6 @@ var (
 	_telegramChatID = must(strconv.Atoi(must(getEnv("TELEGRAM_CHAT_ID"))))
 	_githubOAuth    = must(getEnv("GITHUB_OAUTH"))
 
-	_dateRegex       = regexp.MustCompile(`(Date|Until): (\d{2}\.\d{2}\.\d{4})`)
 	_messageTemplate = must(template.New("").Parse(`<b>📆 Сегодня {{.Today.Format "02 January 2006"}}</b>{{if gt (len .TodayTasks) 0}}
 
 <i>🌟 Планы на сегодня:</i>{{range .TodayTasks}}
@@ -81,7 +85,7 @@ func githubApiRequest[A any](addr string) (*A, error) {
 		return nil, err
 	}
 
-	s, err := ioutil.ReadAll(response.Body)
+	s, err := io.ReadAll(response.Body)
 	if err != nil {
 		return nil, err
 	}
@@ -177,16 +181,44 @@ func composeMessage(messageData messageData) string {
 	return res.String()
 }
 
-func parseCalendarTask(fileContent string) CalendarTask {
-	r := _dateRegex.FindSubmatch([]byte(fileContent))
-	lines := strings.Split(fileContent, "\n")
+func parseCalendarTask(fileContent string) (CalendarTask, error) {
+	node := gm.New().Parser().Parse(text.NewReader([]byte(fileContent)))
+
+	var metadata string
+	if true { // TODO: many safety checks
+		lines := node.
+			FirstChild().
+			NextSibling().
+			Lines()
+		metadata = string(fileContent[lines.At(0).Start:lines.At(lines.Len()-1).Stop])
+	} else {
+		return CalendarTask{}, errors.New("incorrect file")
+	}
+
+	type metadataT struct {
+		Title *string `yaml:"title"`
+		Date  *myDate `yaml:"date"`
+	}
+	var meta metadataT
+	if err := yaml.NewDecoder(bytes.NewReader([]byte(metadata + "\n"))).Decode(&meta); err != nil {
+		return CalendarTask{}, err
+	}
+
+	if meta.Date == nil {
+		return CalendarTask{}, errors.New("date is missing")
+	}
+
+	if meta.Title == nil {
+		return CalendarTask{}, errors.New("title is missing")
+	}
+
 	return CalendarTask{
 		Task: Task{
-			Title: strings.Trim(lines[0], "# "),
+			Title: *meta.Title,
 		},
-		When:    must(time.Parse("02.01.2006-07:00", string(r[2])+"+03:00")),
-		Delayed: string(r[1]) == "Until",
-	}
+		When:    time.Time(*meta.Date),
+		Delayed: false, // string(r[1]) == "Until",
+	}, nil
 }
 
 func parseTask(fileContent string) Task {
@@ -243,7 +275,12 @@ func gtdGetCalendarItems(dir string) ([]CalendarTask, error) {
 		return nil, err
 	}
 	for _, taskContent := range files {
-		res = append(res, parseCalendarTask(string(taskContent)))
+		task, err := parseCalendarTask(string(taskContent))
+		if err != nil {
+			return nil, fmt.Errorf("invalid file %q: %w", taskContent, err)
+		}
+
+		res = append(res, task)
 	}
 	return res, nil
 }
@@ -327,6 +364,20 @@ func run() error {
 			}
 		}
 	}
+}
+
+type myDate time.Time
+
+var _ = encoding.TextUnmarshaler(&myDate{})
+
+func (date *myDate) UnmarshalText(data []byte) error {
+	date1, err := time.Parse("02.01.2006", string(data))
+	if err != nil {
+		return fmt.Errorf("invalid date, date=%q: %w", string(data), err)
+	}
+
+	*date = myDate(date1)
+	return nil
 }
 
 func main() {
