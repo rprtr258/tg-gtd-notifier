@@ -149,7 +149,23 @@ func sample[A any](items []A, k int) []A {
 func getTodayTasks(calendarItems []CalendarTask, todayDate time.Time) []CalendarTask {
 	res := make([]CalendarTask, 0, len(calendarItems))
 	for _, item := range calendarItems {
-		if !item.Delayed && (item.When.Before(todayDate) || item.When.Equal(todayDate)) {
+		if item.Delayed {
+			res = append(res, item)
+			continue
+		}
+		if item.When.Year() != todayDate.Year() {
+			if item.When.Year() < todayDate.Year() {
+				res = append(res, item)
+			}
+			continue
+		}
+		if item.When.Month() != todayDate.Month() {
+			if item.When.Month() < todayDate.Month() {
+				res = append(res, item)
+			}
+			continue
+		}
+		if item.When.Day() <= todayDate.Day() {
 			res = append(res, item)
 		}
 	}
