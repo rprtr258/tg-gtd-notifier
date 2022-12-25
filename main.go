@@ -320,6 +320,9 @@ func run() error {
 		Truncate(time.Hour*24).
 		AddDate(0, 0, 1).
 		Add(time.Hour * 6)
+	if os.Getenv("DEBUG") == "1" {
+		when = time.Now().Add(1 * time.Second)
+	}
 	for {
 		select {
 		case update := <-updates:
